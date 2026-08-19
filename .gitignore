@@ -15,3 +15,4 @@ bin/
 /build/out/
 /runtimes/
 /.nuke/temp
+help/.DS_Store
