@@ -1,13 +1,18 @@
 # rive-runtime submodule update — handoff
 
-Status as of **2026-08-19**. Work done on macOS; the remaining steps need a **Windows** machine.
+Status as of **2026-08-19**. Started on macOS, continued on **Windows**.
 
 ## TL;DR
 
 The `submodules/rive-runtime` pin was bumped from `121dd6de` (2025-11) to
 upstream **`9498c4c0`** (2026-06-13). All source-level changes are committed on
-branch **`update-rive-runtime-2026-06`** (commit `825785d`). What's left is to
-**build the native shim + regenerate bindings on Windows and confirm it runs.**
+branch **`update-rive-runtime-2026-06`** (commit `825785d`).
+
+**Windows build now passes** (native shim + managed both green; ClangSharp regen
+produced an empty `build/generated/` diff — no shim drift). This required a
+build-tooling fix (`13b4aec`) plus installing the Clang toolchain — see
+*Build prerequisites* below. **Only remaining step: the vvvv runtime check**
+(step 5), then merge to `main`.
 
 ## What was done (committed)
 
@@ -58,6 +63,24 @@ uses, pin → target:
   and `File` symbols the shim calls are all unchanged.
 - `build/generate.rsp` untouched — ClangSharp only reflects the extern-C shim
   (which didn't change), not Rive internals.
+
+## Build prerequisites — Windows toolchain
+These are environment requirements, not code. The macOS analysis missed them;
+they were discovered building on a fresh Windows box (VS 2026 Insiders).
+
+- **Visual Studio with the C++ workload** (MSVC toolset + Windows SDK w/ D3D11).
+- **"C++ Clang tools for Windows"** — **required**. Every Rive C++ project builds
+  with the **ClangCL** platform toolset (Rive's PLS renderer needs Clang on
+  Windows; you cannot substitute the MSVC toolset). If it's missing you get
+  `error MSB8020: ClangCL build tools ... not found`. Install via the Visual
+  Studio Installer → Modify → *Individual components* → check **C++ Clang
+  Compiler for Windows** and **MSBuild support for LLVM (clang-cl) toolset**
+  (some VS versions bundle both under one "C++ Clang tools for Windows" entry).
+  Verified working with Clang 22.1.3.
+- **Prerelease VS note:** if the *only* VS on the machine is a prerelease (e.g.
+  VS 2026 Insiders), you need the `build/Build.cs` fixes in commit `13b4aec`
+  (VSWhere `-prerelease` for both the premake and MSBuild steps, plus a PATH
+  preservation fix). Older commits of this branch fail on a prerelease-only box.
 
 ## Next steps — on Windows
 
