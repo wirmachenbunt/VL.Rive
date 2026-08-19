@@ -166,6 +166,7 @@ class Build : NukeBuild
             AbsolutePath vsInstallPath = VSWhereTasks.VSWhere(s => s
                 .SetVersion("17.0")
                 .EnableLatest()
+                .EnablePrerelease()
                 .EnableUTF8()
                 .SetProperty("installationPath"))
                 .Output
@@ -180,12 +181,18 @@ class Build : NukeBuild
                 throw new Exception($"vcvarsall.bat not found at: {vcvarsPath}");
 
             var env = Environment.GetEnvironmentVariables();
-            env["Path"] = string.Join(
-                Path.PathSeparator,
+            // Find the existing PATH key case-insensitively (Windows uses "Path"),
+            // and prepend our tool dirs to the *inherited* system PATH. Using
+            // Environment.GetEnvironmentVariable is authoritative and avoids losing
+            // the system PATH (which carries git, vswhere, etc.) to a case/lookup miss.
+            var pathKey = env.Keys.Cast<string>()
+                .FirstOrDefault(k => string.Equals(k, "Path", StringComparison.OrdinalIgnoreCase)) ?? "Path";
+            env[pathKey] = string.Join(
+                Path.PathSeparator.ToString(),
                 RiveBuildDirectory,
                 LocalBinDirectory,
                 W64DevKitDirectory,
-                env["Path"]
+                Environment.GetEnvironmentVariable("Path")
             );
 
             var environmentVariables = env.Cast<System.Collections.DictionaryEntry>()
@@ -204,7 +211,29 @@ class Build : NukeBuild
         .DependsOn(GenerateInteropSolution)
         .Executes(() =>
         {
+            // Nuke's built-in MSBuild resolver ignores prerelease VS installs, so it
+            // can't find MSBuild on a machine whose only VS is a prerelease (e.g. VS
+            // 2026 Insiders). Resolve the install via VSWhere (prerelease-enabled) and
+            // point MSBuild at it explicitly.
+            AbsolutePath vsInstallPath = VSWhereTasks.VSWhere(s => s
+                .SetVersion("17.0")
+                .EnableLatest()
+                .EnablePrerelease()
+                .EnableUTF8()
+                .SetProperty("installationPath"))
+                .Output
+                .FirstOrDefault()
+                .Text;
+
+            if (string.IsNullOrEmpty(vsInstallPath))
+                throw new Exception("Visual Studio installation not found.");
+
+            var msBuildPath = vsInstallPath / "MSBuild" / "Current" / "Bin" / "amd64" / "MSBuild.exe";
+            if (!msBuildPath.FileExists())
+                msBuildPath = vsInstallPath / "MSBuild" / "Current" / "Bin" / "MSBuild.exe";
+
             MSBuildTasks.MSBuild(s => s
+                .SetProcessToolPath(msBuildPath)
                 .SetSolutionFile(RiveNativeSolution)
                 .SetTargetPlatform(MSBuildTargetPlatform.x64)
                 .SetVerbosity(MSBuildVerbosity.Quiet));
