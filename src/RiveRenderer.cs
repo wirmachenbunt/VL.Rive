@@ -80,8 +80,9 @@ public sealed partial class RiveRenderer : RendererBase
         [Pin(Visibility = Model.PinVisibility.Optional)] Optional<RectangleF> frame,
         [Pin(Visibility = Model.PinVisibility.Optional)] Optional<RectangleF> content,
         [Pin(Visibility = Model.PinVisibility.Optional)] [DefaultValue(1f)] float scaleFactor, 
-        [DefaultValue(null)] object? viewModel, 
-        bool reload)
+        [DefaultValue(null)] object? viewModel,
+        bool reload,
+        [Pin(Visibility = Model.PinVisibility.Optional)] bool update)
     {
         riveFit = fit;
         riveAlignment = alignment;
@@ -115,7 +116,10 @@ public sealed partial class RiveRenderer : RendererBase
         }
 
         // Load artboard and view model instance
-        if (riveArtboard is null || artboardName != this.artboardName)
+        // 'update' forces a fresh artboard instance (setup pose) so switching to a
+        // short/single-frame timeline re-applies cleanly instead of blending on top of
+        // whatever the previous timeline left on the reused artboard.
+        if (update || riveArtboard is null || artboardName != this.artboardName)
         {
             this.artboardName = artboardName;
 
@@ -138,7 +142,7 @@ public sealed partial class RiveRenderer : RendererBase
         }
 
         // Load scene
-        if (riveScene is null || sceneName != this.sceneName)
+        if (update || riveScene is null || sceneName != this.sceneName)
         {
             this.sceneName = sceneName;
 
