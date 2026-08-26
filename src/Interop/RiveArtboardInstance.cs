@@ -15,21 +15,29 @@ internal class RiveArtboardInstance : RiveObject
         }
     }
 
-    public RiveScene? GetDefaultScene()
+    public unsafe RiveScene? GetDefaultScene()
     {
-        var sceneHandle = rive_ArtboardInstance_DefaultScene(handle);
+        bool isAnimation = false;
+        var sceneHandle = rive_ArtboardInstance_DefaultScene(handle, &isAnimation);
         if (sceneHandle == nint.Zero)
             return null;
-        return new RiveScene(sceneHandle);
+        return new RiveScene(sceneHandle) { IsLinearAnimation = isAnimation };
     }
 
     public unsafe RiveScene? GetScene(string name)
     {
         using var marshaledName = new MarshaledString(name);
-        var sceneHandle = rive_ArtboardInstance_SceneByName(handle, marshaledName.Value);
+        bool isAnimation = false;
+        var sceneHandle = rive_ArtboardInstance_SceneByName(handle, marshaledName.Value, &isAnimation);
         if (sceneHandle == nint.Zero)
             return null;
-        return new RiveScene(sceneHandle);
+        return new RiveScene(sceneHandle) { IsLinearAnimation = isAnimation };
+    }
+
+    /// <summary>Advances the artboard hierarchy; call with 0 after scrubbing to flush the applied pose.</summary>
+    public void Advance(float seconds)
+    {
+        rive_ArtboardInstance_Advance(handle, seconds);
     }
 
     protected override bool ReleaseHandle()

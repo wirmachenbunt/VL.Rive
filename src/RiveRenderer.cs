@@ -82,7 +82,9 @@ public sealed partial class RiveRenderer : RendererBase
         [Pin(Visibility = Model.PinVisibility.Optional)] [DefaultValue(1f)] float scaleFactor, 
         [DefaultValue(null)] object? viewModel,
         bool reload,
-        [Pin(Visibility = Model.PinVisibility.Optional)] bool update)
+        [Pin(Visibility = Model.PinVisibility.Optional)] bool update,
+        [Pin(Visibility = Model.PinVisibility.Optional)] bool externalTimeControl,
+        [Pin(Visibility = Model.PinVisibility.Optional)] float progress)
     {
         riveFit = fit;
         riveAlignment = alignment;
@@ -195,7 +197,24 @@ public sealed partial class RiveRenderer : RendererBase
         if (riveViewModelInstance != null && Interlocked.Exchange(ref needToWrite, 0) > 0)
             WriteValuesToRive(riveViewModelInstance, viewModel);
 
-        riveScene.AdvanceAndApply((float)frameClock.TimeDifference);
+        if (externalTimeControl && riveScene.IsLinearAnimation)
+        {
+            // Drive the timeline position directly from 'progress' (0..1) instead of
+            // advancing by the frame clock. This lets the patch scrub, reverse, or run
+            // the animation at any speed. Not supported for state machines.
+            var duration = riveScene.DurationSeconds;
+            if (duration > 0f)
+            {
+                var normalized = Math.Clamp(progress, 0f, 1f);
+                riveScene.SetTimeAndApply(normalized * duration);
+                // Flush the applied pose through the artboard (transforms, constraints, ...).
+                riveArtboard?.Advance(0f);
+            }
+        }
+        else
+        {
+            riveScene.AdvanceAndApply((float)frameClock.TimeDifference);
+        }
 
         if (riveViewModelInstance != null)
             ReadValuesFromRive(riveViewModelInstance, viewModel);

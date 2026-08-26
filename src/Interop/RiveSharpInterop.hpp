@@ -141,10 +141,11 @@ extern "C"
 	__declspec(dllexport) const char* rive_Animation_Name(Animation* animation);
 
 	// ArtboardInstance (inherits from Artboard)
-	__declspec(dllexport) Scene* rive_ArtboardInstance_SceneByName(ArtboardInstance* artboard, const char* name);
+	__declspec(dllexport) Scene* rive_ArtboardInstance_SceneByName(ArtboardInstance* artboard, const char* name, bool* isAnimation);
 	__declspec(dllexport) Scene* rive_ArtboardInstance_StateMachineAt(ArtboardInstance* artboard, int index);
 	__declspec(dllexport) Scene* rive_ArtboardInstance_AnimationAt(ArtboardInstance* artboard, int index);
-	__declspec(dllexport) Scene* rive_ArtboardInstance_DefaultScene(ArtboardInstance* artboard);
+	__declspec(dllexport) Scene* rive_ArtboardInstance_DefaultScene(ArtboardInstance* artboard, bool* isAnimation);
+	__declspec(dllexport) bool rive_ArtboardInstance_Advance(ArtboardInstance* artboard, float seconds);
 	__declspec(dllexport) void rive_ArtboardInstance_Destroy(ArtboardInstance* artboard);
 
     __declspec(dllexport) void rive_Artboard_BindViewModelInstance(Artboard* artboard, ViewModelInstance* viewModelInstance);
@@ -175,6 +176,10 @@ extern "C"
 
     // Advances and applies the scene, returns true if draw() should be called
     __declspec(dllexport) bool rive_Scene_AdvanceAndApply(Scene* scene, float elapsedSeconds);
+
+    // Sets the absolute time (seconds) of a linear-animation scene and applies it (scrubbing).
+    // Only valid when the scene is a linear animation (see isAnimation from SceneByName/DefaultScene).
+    __declspec(dllexport) void rive_Scene_SetTimeAndApply(Scene* scene, float seconds);
 
     // Binds a ViewModelInstance to the scene
     __declspec(dllexport) void rive_Scene_BindViewModelInstance(Scene* scene, ViewModelInstance* viewModelInstance);

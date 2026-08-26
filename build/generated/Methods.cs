@@ -127,7 +127,7 @@ namespace VL.Rive.Interop
 
         [DllImport("rive_interop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         [return: NativeTypeName("rive::Scene *")]
-        public static extern nint rive_ArtboardInstance_SceneByName([NativeTypeName("rive::ArtboardInstance *")] nint artboard, [NativeTypeName("const char *")] sbyte* name);
+        public static extern nint rive_ArtboardInstance_SceneByName([NativeTypeName("rive::ArtboardInstance *")] nint artboard, [NativeTypeName("const char *")] sbyte* name, bool* isAnimation);
 
         [DllImport("rive_interop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         [return: NativeTypeName("rive::Scene *")]
@@ -139,7 +139,11 @@ namespace VL.Rive.Interop
 
         [DllImport("rive_interop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         [return: NativeTypeName("rive::Scene *")]
-        public static extern nint rive_ArtboardInstance_DefaultScene([NativeTypeName("rive::ArtboardInstance *")] nint artboard);
+        public static extern nint rive_ArtboardInstance_DefaultScene([NativeTypeName("rive::ArtboardInstance *")] nint artboard, bool* isAnimation);
+
+        [DllImport("rive_interop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte rive_ArtboardInstance_Advance([NativeTypeName("rive::ArtboardInstance *")] nint artboard, float seconds);
 
         [DllImport("rive_interop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         public static extern void rive_ArtboardInstance_Destroy([NativeTypeName("rive::ArtboardInstance *")] nint artboard);
@@ -179,6 +183,9 @@ namespace VL.Rive.Interop
         [DllImport("rive_interop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         [return: NativeTypeName("bool")]
         public static extern byte rive_Scene_AdvanceAndApply([NativeTypeName("rive::Scene *")] nint scene, float elapsedSeconds);
+
+        [DllImport("rive_interop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void rive_Scene_SetTimeAndApply([NativeTypeName("rive::Scene *")] nint scene, float seconds);
 
         [DllImport("rive_interop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         public static extern void rive_Scene_BindViewModelInstance([NativeTypeName("rive::Scene *")] nint scene, [NativeTypeName("rive::ViewModelInstance *")] nint viewModelInstance);

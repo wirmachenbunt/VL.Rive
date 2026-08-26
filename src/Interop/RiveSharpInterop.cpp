@@ -1,5 +1,7 @@
 #include "RiveSharpInterop.hpp"
 #include "rive/static_scene.hpp"
+#include "rive/artboard.hpp"
+#include "rive/animation/linear_animation_instance.hpp"
 #include "rive/generated/viewmodel/viewmodel_property_viewmodel_base.hpp";
 #include "utils/no_op_factory.hpp"
 
@@ -268,16 +270,26 @@ extern "C"
     }
 
 	// ArtboardInstance
-    Scene* rive_ArtboardInstance_SceneByName(ArtboardInstance* artboard, const char* name)
+    // isAnimation (optional out) reports whether the resolved scene is a linear
+    // animation (true) vs a state machine (false), so the managed side knows when
+    // absolute-time scrubbing via rive_Scene_SetTimeAndApply is valid.
+    Scene* rive_ArtboardInstance_SceneByName(ArtboardInstance* artboard, const char* name, bool* isAnimation)
     {
         auto sm = artboard->stateMachineNamed(name);
         if (sm != nullptr)
+        {
+            if (isAnimation != nullptr) *isAnimation = false;
             return sm.release();
+        }
 
         auto animation = artboard->animationNamed(name);
         if (animation != nullptr)
+        {
+            if (isAnimation != nullptr) *isAnimation = true;
             return animation.release();
+        }
 
+        if (isAnimation != nullptr) *isAnimation = false;
         return nullptr;
     }
 
@@ -291,9 +303,25 @@ extern "C"
         return artboard->animationAt(index).release();
     }
 
-    Scene* rive_ArtboardInstance_DefaultScene(ArtboardInstance* artboard)
+    Scene* rive_ArtboardInstance_DefaultScene(ArtboardInstance* artboard, bool* isAnimation)
     {
-        return artboard->defaultScene().release();
+        Scene* scene = artboard->defaultScene().release();
+        if (isAnimation != nullptr)
+        {
+            // defaultScene() picks a state machine first, only falling back to an
+            // animation when the artboard has no state machines.
+            *isAnimation = scene != nullptr &&
+                           artboard->stateMachineCount() == 0 &&
+                           artboard->animationCount() > 0;
+        }
+        return scene;
+    }
+
+    // Advances the artboard hierarchy (transforms, constraints, ...). Call with 0
+    // seconds after scrubbing a linear animation so the applied pose is flushed.
+    bool rive_ArtboardInstance_Advance(ArtboardInstance* artboard, float seconds)
+    {
+        return artboard->advance(seconds);
     }
 
     void rive_ArtboardInstance_Destroy(ArtboardInstance* artboard)
@@ -361,6 +389,18 @@ extern "C"
     bool rive_Scene_AdvanceAndApply(Scene* scene, float elapsedSeconds)
     {
         return scene->advanceAndApply(elapsedSeconds);
+    }
+
+    // Sets the absolute time (in seconds) of a linear-animation scene and applies it,
+    // enabling external scrubbing. The caller MUST guarantee the scene is a linear
+    // animation (see the isAnimation flag from SceneByName/DefaultScene) - the
+    // static_cast is only valid then (Rive is built without RTTI, so no dynamic_cast).
+    // The artboard still needs advancing afterwards (rive_ArtboardInstance_Advance(0)).
+    void rive_Scene_SetTimeAndApply(Scene* scene, float seconds)
+    {
+        auto* animation = static_cast<LinearAnimationInstance*>(scene);
+        animation->time(seconds);
+        animation->apply();
     }
 
     void rive_Scene_BindViewModelInstance(Scene* scene, ViewModelInstance* viewModelInstance)
