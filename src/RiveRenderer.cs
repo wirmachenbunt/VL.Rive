@@ -123,22 +123,31 @@ public sealed partial class RiveRenderer : RendererBase
         {
             this.artboardName = artboardName;
 
-            DisposeAndSetNull(ref riveArtboard);
-            DisposeAndSetNull(ref riveScene);
-            riveViewModelInstance = null;
-            lastViewModel = null;
-
+            // Resolve into a local first so an unknown name doesn't throw and freeze vvvv -
+            // we only swap out the current artboard once we actually resolved a new one.
+            RiveArtboardInstance? newArtboard;
             if (string.IsNullOrEmpty(artboardName))
-                riveArtboard = riveFile?.GetArtboardDefault();
+                newArtboard = riveFile?.GetArtboardDefault();
             else
             {
-                riveArtboard = riveFile?.GetArtboard(artboardName);
-                if (riveArtboard is null)
-                    throw new ArgumentException($"Rive artboard '{artboardName}' not found in file '{file}'.");
+                newArtboard = riveFile?.GetArtboard(artboardName);
+                if (newArtboard is null && riveFile is not null)
+                    logger.LogWarning("Rive artboard '{ArtboardName}' not found in file '{File}'. Keeping previous artboard.", artboardName, file);
             }
 
-            if (riveArtboard != null)
-                riveViewModelInstance = riveFile?.DefaultArtboardViewModel(riveArtboard);
+            // Swap when we resolved something, or when there's no file to resolve against (clear).
+            if (newArtboard is not null || riveFile is null)
+            {
+                DisposeAndSetNull(ref riveArtboard);
+                DisposeAndSetNull(ref riveScene);
+                riveViewModelInstance = null;
+                lastViewModel = null;
+
+                riveArtboard = newArtboard;
+
+                if (riveArtboard != null)
+                    riveViewModelInstance = riveFile?.DefaultArtboardViewModel(riveArtboard);
+            }
         }
 
         // Load scene
@@ -146,19 +155,26 @@ public sealed partial class RiveRenderer : RendererBase
         {
             this.sceneName = sceneName;
 
-            DisposeAndSetNull(ref riveScene);
-
+            // Same fail-safe as the artboard: resolve first, only swap on success so an
+            // unknown scene name keeps the previous scene instead of throwing.
+            RiveScene? newScene;
             if (string.IsNullOrEmpty(sceneName))
-                riveScene = riveArtboard?.GetDefaultScene();
+                newScene = riveArtboard?.GetDefaultScene();
             else
             {
-                riveScene = riveArtboard?.GetScene(sceneName);
-                if (riveScene is null)
-                    throw new ArgumentException($"Rive scene '{sceneName}' not found in artboard '{artboardName}' of file '{file}'.");
+                newScene = riveArtboard?.GetScene(sceneName);
+                if (newScene is null && riveArtboard is not null)
+                    logger.LogWarning("Rive scene '{SceneName}' not found in artboard '{ArtboardName}' of file '{File}'. Keeping previous scene.", sceneName, artboardName, file);
             }
 
-            if (riveViewModelInstance != null)
-                riveScene?.BindViewModelInstance(riveViewModelInstance);
+            if (newScene is not null || riveArtboard is null)
+            {
+                DisposeAndSetNull(ref riveScene);
+                riveScene = newScene;
+
+                if (riveScene != null && riveViewModelInstance != null)
+                    riveScene.BindViewModelInstance(riveViewModelInstance);
+            }
         }
 
         if (riveScene is null)
