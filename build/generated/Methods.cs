@@ -146,6 +146,10 @@ namespace VL.Rive.Interop
         public static extern byte rive_ArtboardInstance_Advance([NativeTypeName("rive::ArtboardInstance *")] nint artboard, float seconds);
 
         [DllImport("rive_interop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte rive_ArtboardInstance_SetTextRun([NativeTypeName("rive::ArtboardInstance *")] nint artboard, [NativeTypeName("const char *")] sbyte* name, [NativeTypeName("const char *")] sbyte* path, [NativeTypeName("const char *")] sbyte* text);
+
+        [DllImport("rive_interop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         public static extern void rive_ArtboardInstance_Destroy([NativeTypeName("rive::ArtboardInstance *")] nint artboard);
 
         [DllImport("rive_interop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]

@@ -2,6 +2,7 @@
 #include "rive/static_scene.hpp"
 #include "rive/artboard.hpp"
 #include "rive/animation/linear_animation_instance.hpp"
+#include "rive/text/text_value_run.hpp"
 #include "rive/generated/viewmodel/viewmodel_property_viewmodel_base.hpp";
 #include "utils/no_op_factory.hpp"
 
@@ -327,6 +328,33 @@ extern "C"
     void rive_ArtboardInstance_Destroy(ArtboardInstance* artboard)
     {
         delete artboard;
+    }
+
+    // Sets the text of a named text-value run (the cables.gl-style direct API,
+    // independent of data binding). Returns true if a run with that name was found.
+    //
+    // Empty 'path': the run lives in THIS artboard. find<>() scans the artboard's
+    // flat object list, so the run is located by name no matter how deeply it's
+    // nested in groups/layers - only the run's name matters.
+    //
+    // Non-empty 'path': the run lives inside an embedded NESTED artboard, addressed
+    // by a '/'-delimited path of nested-artboard names (e.g. "Outer/Inner").
+    // getTextRun() itself returns nullptr for an empty path, hence the split.
+    //
+    // The setter is a no-op when the value is unchanged, so this is safe to call
+    // every frame; the returned run is a non-owning pointer, nothing to release.
+    bool rive_ArtboardInstance_SetTextRun(ArtboardInstance* artboard, const char* name, const char* path, const char* text)
+    {
+        std::string runName(name);
+        std::string pathStr = path != nullptr ? std::string(path) : std::string();
+
+        TextValueRun* run = pathStr.empty()
+            ? artboard->find<TextValueRun>(runName)
+            : artboard->getTextRun(runName, pathStr);
+        if (run == nullptr)
+            return false;
+        run->text(std::string(text));
+        return true;
     }
 
     void rive_Artboard_BindViewModelInstance(Artboard* artboard, ViewModelInstance* viewModelInstance)

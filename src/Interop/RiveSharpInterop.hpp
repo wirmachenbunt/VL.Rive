@@ -146,6 +146,8 @@ extern "C"
 	__declspec(dllexport) Scene* rive_ArtboardInstance_AnimationAt(ArtboardInstance* artboard, int index);
 	__declspec(dllexport) Scene* rive_ArtboardInstance_DefaultScene(ArtboardInstance* artboard, bool* isAnimation);
 	__declspec(dllexport) bool rive_ArtboardInstance_Advance(ArtboardInstance* artboard, float seconds);
+	// Sets a named text-value run's text (path "" = top-level artboard). Returns true if found.
+	__declspec(dllexport) bool rive_ArtboardInstance_SetTextRun(ArtboardInstance* artboard, const char* name, const char* path, const char* text);
 	__declspec(dllexport) void rive_ArtboardInstance_Destroy(ArtboardInstance* artboard);
 
     __declspec(dllexport) void rive_Artboard_BindViewModelInstance(Artboard* artboard, ViewModelInstance* viewModelInstance);

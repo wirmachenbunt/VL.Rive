@@ -51,6 +51,10 @@ public sealed partial class RiveRenderer : RendererBase
     object? lastViewModel;
     int needToWrite;
 
+    // Names of text runs we've already warned about as missing, so applying the
+    // spread every frame doesn't spam the log. Cleared whenever the artboard changes.
+    readonly HashSet<string> warnedMissingTextRuns = new();
+
     string? artboardName;
     string? sceneName;
     RiveFit riveFit;
@@ -84,7 +88,8 @@ public sealed partial class RiveRenderer : RendererBase
         bool reload,
         [Pin(Visibility = Model.PinVisibility.Optional)] bool update,
         [Pin(Visibility = Model.PinVisibility.Optional)] bool externalTimeControl,
-        [Pin(Visibility = Model.PinVisibility.Optional)] float progress)
+        [Pin(Visibility = Model.PinVisibility.Optional)] float progress,
+        [Pin(Visibility = Model.PinVisibility.Optional)] Spread<RiveTextRun>? textRuns)
     {
         riveFit = fit;
         riveAlignment = alignment;
@@ -146,6 +151,9 @@ public sealed partial class RiveRenderer : RendererBase
                 lastViewModel = null;
 
                 riveArtboard = newArtboard;
+                // Fresh artboard instance starts with the file's default text runs, so allow
+                // missing-run warnings to fire again and let the spread re-apply below.
+                warnedMissingTextRuns.Clear();
 
                 if (riveArtboard != null)
                     riveViewModelInstance = riveFile?.DefaultArtboardViewModel(riveArtboard);
@@ -181,6 +189,21 @@ public sealed partial class RiveRenderer : RendererBase
 
         if (riveScene is null)
             return;
+
+        // Named text runs - direct control independent of data binding. Applied every
+        // frame (the native setter no-ops on unchanged text, so this is cheap) so it
+        // also re-applies after the artboard is rebuilt.
+        if (riveArtboard != null && textRuns != null)
+        {
+            foreach (var run in textRuns)
+            {
+                if (string.IsNullOrEmpty(run.Name))
+                    continue;
+                if (!riveArtboard.SetTextRun(run.Name, run.Value ?? string.Empty, run.Path ?? string.Empty)
+                    && warnedMissingTextRuns.Add(run.Name))
+                    logger.LogWarning("Rive text run '{TextRunName}' not found in artboard '{ArtboardName}' of file '{File}'.", run.Name, artboardName, file);
+            }
+        }
 
         if (viewModel != lastViewModel)
         {
