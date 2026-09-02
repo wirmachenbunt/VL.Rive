@@ -1,132 +1,134 @@
-# rive-runtime submodule update — handoff
+# VL.Rive — runtime update & state notes
 
-Status as of **2026-08-19**. Started on macOS, continued on **Windows**.
+Living reference for the rive-runtime submodule migration (now **complete**) and
+the durable build/deploy knowledge that came out of it. Last updated
+**2026-09-02**.
 
-## TL;DR
+## TL;DR — runtime update is done
 
-The `submodules/rive-runtime` pin was bumped from `121dd6de` (2025-11) to
-upstream **`9498c4c0`** (2026-06-13). All source-level changes are committed on
-branch **`update-rive-runtime-2026-06`** (commit `825785d`).
+The `submodules/rive-runtime` pin has been migrated off the stale vvvv fork onto
+plain upstream `rive-app/rive-runtime` and bumped to its **August 2026 head,
+`61f00897`**. All changes are committed and pushed to **`main`**; the build is
+green (native ClangCL + managed) and `.riv` files render correctly in vvvv.
+There is no open migration work.
 
-**Windows build now passes** (native shim + managed both green; ClangSharp regen
-produced an empty `build/generated/` diff — no shim drift). This required a
-build-tooling fix (`13b4aec`) plus installing the Clang toolchain — see
-*Build prerequisites* below. **Only remaining step: the vvvv runtime check**
-(step 5), then merge to `main`.
+| Item | State |
+|------|-------|
+| Submodule pin | **`61f00897`** (upstream `rive-app/rive-runtime`, 2026-08) |
+| `.gitmodules` url | `https://github.com/rive-app/rive-runtime.git` (was the vvvv fork) |
+| Native + managed build | Green (ClangCL native, ClangSharp regen clean, managed OK) |
+| vvvv runtime render | Confirmed working |
 
-## What was done (committed)
+### Pin history
+- `121dd6de` (2025-11) — old fork pin, could not resolve against the fork url.
+- `9498c4c0` (2026-06-13) — first upstream bump, on branch
+  `update-rive-runtime-2026-06`, merged to `main`.
+- **`61f00897` (2026-08)** — second bump, straight to upstream head. **Current.**
 
-| File | Change |
-|------|--------|
-| `submodules/rive-runtime` | Pointer `121dd6de` → `9498c4c0` (plain `rive-app/rive-runtime` main) |
-| `.gitmodules` | `url` repointed `vvvv/rive-runtime` → `rive-app/rive-runtime` |
-| `src/Interop/FrameDescriptor.cs` | Added `DitherMode` enum + 3 fields to mirror the native struct |
+The rive-runtime monorepo has **no release tags** — it's rolling `main`, so
+"latest stable" = latest `main` that builds and renders.
 
-### Why the URL was repointed
-The vvvv fork's `main` is stuck at Jun 2025. Neither the old pin (`121dd6de`,
-Nov 2025) nor the new one lives on the fork, so `git submodule update --init`
-against the fork URL could not resolve the pin — this was already latently
-broken before this update. Upstream `rive-app/rive-runtime` contains both, so
-pointing there fixes it.
+## FrameDescriptor ABI — the thing to watch on every bump
 
-### Why FrameDescriptor.cs changed
-`src/Interop/FrameDescriptor.cs` is a **hand-written** mirror (NOT in
+`src/Interop/FrameDescriptor.cs` is a **hand-written** mirror (NOT generated into
 `build/generated/`) of `rive::gpu::RenderContext::FrameDescriptor`. It's passed
-to native by pointer (see `RiveRenderContext.cs` → `BeginFrame`), so its field
-order and types must match the C++ struct byte-for-byte. Between the two pins
-the native struct gained three fields mid-struct:
-`DitherMode ditherMode`, `uint32_t virtualTileWidth`, `uint32_t virtualTileHeight`.
-Those were added to the C# mirror in the same position.
+to native by pointer (`RiveRenderContext.cs` → `BeginFrame`), so field order and
+types must match the C++ struct **byte-for-byte**. Every runtime bump must diff
+this struct. Two bumps' worth of drift, already reconciled:
+
+- **→ `9498c4c0`:** struct gained three mid-struct fields —
+  `DitherMode ditherMode`, `uint32_t virtualTileWidth`,
+  `uint32_t virtualTileHeight`.
+- **→ `61f00897`:** head inserted `TriangulationThresholds triangulationThresholds`
+  mid-struct (after `ditherMode`, before `virtualTileWidth`). That struct holds a
+  `size_t maxVerbs` → mirrored in C# as `nuint MaxVerbs`, which forces 8-byte
+  alignment on the whole FrameDescriptor. **Defaults MUST be non-zero**
+  (MinArea = 512*512, MaxVerbs = 256, FrameBudgetMs = 2) or triangulation is
+  silently disabled.
+
+Symptom of a misaligned FrameDescriptor: garbled rendering / wrong clear color /
+wrong dither — **not** a crash. Other API deltas across these bumps were
+source-compatible (e.g. `File::import` gained a trailing
+`ScriptingVM* vm = nullptr`; `File::viewModel(size_t)` gained `const`). Luau
+scripting stays gated behind premake `--with_rive_scripting`, which the build
+does not pass (`--with_rive_text --with_rive_layout`), so no new link dependency.
 
 ## Fork patches — intentionally dropped
-The vvvv fork carried two local patches; both were checked and **not** reapplied:
-- **`srgb` branch** (`65fb60be`, "Adds SRGB texture formats") — D3D11 sRGB
-  render-target acceptance in `renderer/src/d3d11/render_context_d3d_impl.cpp`.
-  The current pin already dropped it; we pinned plain upstream. It still
-  cherry-picks cleanly if you decide you need it:
-  `git -C submodules/rive-runtime cherry-pick 65fb60be` (then you'd have to push
-  a fork branch and pin to it, since it's not an upstream commit).
-- **`arm64-hack` branch** (`24a31509`) — flips every premake
-  `architecture('x64')` → `ARM64`. Obsolete: VL.Rive's own `build/premake5.lua`
-  already parametrizes arch via `platforms:x64 / platforms:ARM64` filters.
-
-## API-break analysis (why this bump is low-risk)
-Diffed every Rive symbol the shim (`src/Interop/RiveSharpInterop.cpp/.hpp`)
-uses, pin → target:
-- **Only real break:** `FrameDescriptor` (handled above).
-- `File::import` gained a trailing `ScriptingVM* vm = nullptr` — source
-  compatible; the shim's 3-arg call still binds.
-- Luau scripting is gated behind premake `--with_rive_scripting`, which the
-  build does **not** pass (it uses `--with_rive_text --with_rive_layout`), so no
-  new link dependency and no `build/premake5.lua` change.
-- D3D render-context, `RiveRenderer`, `Scene`, `Artboard`, `ViewModel*Runtime`,
-  and `File` symbols the shim calls are all unchanged.
-- `build/generate.rsp` untouched — ClangSharp only reflects the extern-C shim
-  (which didn't change), not Rive internals.
+The old vvvv fork carried two local patches; both were checked and **not**
+reapplied when moving to upstream:
+- **`srgb`** (`65fb60be`) — D3D11 sRGB render-target acceptance. Inert on the PLS
+  atomics path anyway (color is written through the UAV, which can't be `_SRGB`);
+  the sRGB→linear fix lives **downstream in the PixelGrid shaders**, not here.
+- **`arm64-hack`** (`24a31509`) — obsolete; `build/premake5.lua` already
+  parametrizes arch via `platforms:x64 / platforms:ARM64` filters.
 
 ## Build prerequisites — Windows toolchain
-These are environment requirements, not code. The macOS analysis missed them;
-they were discovered building on a fresh Windows box (VS 2026 Insiders).
-
+Environment requirements, not code:
 - **Visual Studio with the C++ workload** (MSVC toolset + Windows SDK w/ D3D11).
 - **"C++ Clang tools for Windows"** — **required**. Every Rive C++ project builds
   with the **ClangCL** platform toolset (Rive's PLS renderer needs Clang on
-  Windows; you cannot substitute the MSVC toolset). If it's missing you get
-  `error MSB8020: ClangCL build tools ... not found`. Install via the Visual
-  Studio Installer → Modify → *Individual components* → check **C++ Clang
-  Compiler for Windows** and **MSBuild support for LLVM (clang-cl) toolset**
-  (some VS versions bundle both under one "C++ Clang tools for Windows" entry).
-  Verified working with Clang 22.1.3.
-- **Prerelease VS note:** if the *only* VS on the machine is a prerelease (e.g.
-  VS 2026 Insiders), you need the `build/Build.cs` fixes in commit `13b4aec`
-  (VSWhere `-prerelease` for both the premake and MSBuild steps, plus a PATH
-  preservation fix). Older commits of this branch fail on a prerelease-only box.
+  Windows; MSVC alone won't do). Missing it → `error MSB8020: ClangCL build
+  tools ... not found`. Install via VS Installer → Individual components →
+  **C++ Clang Compiler for Windows** + **MSBuild support for LLVM (clang-cl)
+  toolset**. Verified with Clang 22.1.3.
+- **Prerelease-only VS** (e.g. VS 2026 Insiders): needs the `build/Build.cs`
+  fixes in commit `13b4aec` (VSWhere `-prerelease` for premake and MSBuild steps
+  + a PATH preservation fix).
 
-## Next steps — on Windows
+## Building
 
-1. **Sync the submodule to the committed pin:**
-   ```
-   git checkout update-rive-runtime-2026-06
-   git submodule update --init --recursive
-   ```
-   (LFS: the repo uses Git LFS — make sure `git lfs pull` has run for the submodule.)
-
-2. **Build native + managed (this also regenerates bindings):**
-   ```
-   build.cmd
-   ```
-   The Nuke `Compile` target chains: GenerateInteropSolution (premake vs2022
-   `--with_rive_text --with_rive_layout`) → BuildRiveNative (MSBuild x64) →
-   GenerateInteropCode (ClangSharp `@generate.rsp`) → BuildRiveManaged.
-   Requires: Visual Studio 2017+ (VSWhere finds 17.0), Windows SDK w/ D3D11.
-   Build.cs auto-downloads premake5, python3.13, w64devkit.
-
-3. **If the native shim fails to compile**, the most likely culprit is a Rive
-   API drift not caught by the macOS header analysis. Check the error against
-   `src/Interop/RiveSharpInterop.cpp`. If a specific symbol regressed, try an
-   earlier upstream commit (bisect between `121dd6de` and `9498c4c0`) rather
-   than going straight to head (`34f6df4`, 2026-08).
-
-4. **Regen sanity check:** after ClangSharp runs, `git diff build/generated/`
-   should be empty or trivial. If `Methods.cs` changed meaningfully, the shim
-   hpp surface drifted — reconcile before committing.
-
-5. **Runtime check:** load a `.riv` in vvvv and confirm it renders. The
-   FrameDescriptor layout is the thing to watch — if fields are misaligned,
-   you'll get garbled rendering or wrong clear color / dither, not a crash.
-
-6. If all good, commit any regenerated files, then merge
-   `update-rive-runtime-2026-06` → `main` (or open a PR).
-
-## Rollback
+Full native + managed (regenerates bindings):
 ```
-git checkout main            # abandon the branch, or
-git revert 825785d           # if already merged
+build.cmd
 ```
-The old pin `121dd6de` is still a valid upstream commit.
+Chains: GenerateInteropSolution (premake vs2022 `--with_rive_text
+--with_rive_layout`) → BuildRiveNative (MSBuild x64) → GenerateInteropCode
+(ClangSharp `@generate.rsp`) → BuildRiveManaged. Build.cs auto-downloads
+premake5, python, w64devkit.
+
+**Managed-only changes** (anything under `src/*.cs` that doesn't touch the native
+shim) don't need the native step:
+```
+dotnet build src/VL.Rive.csproj -c Release
+```
+Output: `lib/net8.0/VL.Rive.dll`.
+
+Regen sanity check: after ClangSharp runs, `git diff build/generated/` should be
+empty or trivial. A meaningful `Methods.cs` diff means the shim hpp surface
+drifted — reconcile before committing.
+
+## Deploy to vvvv (for this machine's FutureOfProcurement project)
+vvvv loads the pack from a project-local nugets folder, **not** `%LOCALAPPDATA%`
+or `~/.nuget`. Copy the built DLL to:
+```
+C:\FutureOfProcurement\Gamma\nugets\VL.Rive.0.0.15-pre\lib\net8.0\VL.Rive.dll
+```
+Close vvvv first (it locks the DLL). Back up the existing one before overwriting.
+
+## Post-update RiveRenderer features (on top of the runtime migration)
+- `05f5936` — optional `update` pin (forces a fresh setup-pose artboard) + fail-safe
+  artboard/scene name lookup (unknown name logs a warning, keeps last valid content
+  instead of throwing/freezing vvvv).
+- `6118efb` — linear-animation scrubbing (`externalTimeControl` + `progress`).
+- `f9c43bc` — named **Text Runs** input (`Spread<RiveTextRun>`), direct text-run
+  control independent of data binding. Requires the `.riv` exported **"with all
+  names"** or by-name lookups fail silently.
+- `3fed6c4` — view model now binds at the **artboard** level, not the scene, so it
+  applies even when a specific timeline is selected via Scene Name (the base
+  `Scene::bindViewModelInstance` is empty — scene-level binding was a silent no-op
+  for linear animations).
+- `55870ac` — under `externalTimeControl`, the artboard advances by the real frame
+  delta (not 0), so nested/instanced list artboards run on their own clock and play
+  intro animations when instanced, while the parent timeline stays scrubbed.
+
+## Rollback (runtime pin)
+```
+git revert 3103a46          # the 61f00897 bump commit, or
+git -C submodules/rive-runtime checkout 9498c4c0   # step back to the June pin
+```
+Both `9498c4c0` and `121dd6de` are still valid upstream commits.
 
 ## Reference — key commits
-- Old pin: `121dd6de` (2025-11-18)
-- New pin: `9498c4c0` (2026-06-13) ← current
-- Upstream head at time of update: `34f6df4` (2026-08-18)
-- Fork srgb patch: `65fb60be` · Fork arm64 hack: `24a31509`
+- Current pin: `61f00897` (upstream head, 2026-08)
+- Prior pin: `9498c4c0` (2026-06-13) · Original fork pin: `121dd6de` (2025-11-18)
+- Dropped fork patches: srgb `65fb60be` · arm64-hack `24a31509`
