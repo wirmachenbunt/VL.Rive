@@ -156,7 +156,20 @@ public sealed partial class RiveRenderer : RendererBase
                 warnedMissingTextRuns.Clear();
 
                 if (riveArtboard != null)
+                {
                     riveViewModelInstance = riveFile?.DefaultArtboardViewModel(riveArtboard);
+
+                    // Bind at the ARTBOARD level, not the scene. Data binding lives on the
+                    // artboard, and its property bindings drive the artboard's visuals for ANY
+                    // scene type. Binding through the scene only works for state machines
+                    // (StateMachineInstance overrides bindViewModelInstance) - the base Scene
+                    // impl is empty, so binding through a linear-animation scene is a silent
+                    // no-op and the view model gets ignored while a timeline plays. A state
+                    // machine created afterwards (in the scene block below) inherits this
+                    // binding via ArtboardInstance::stateMachineNamed -> inheritDataContext.
+                    if (riveViewModelInstance != null)
+                        riveArtboard.BindViewModelInstance(riveViewModelInstance);
+                }
             }
         }
 
@@ -182,8 +195,9 @@ public sealed partial class RiveRenderer : RendererBase
                 DisposeAndSetNull(ref riveScene);
                 riveScene = newScene;
 
-                if (riveScene != null && riveViewModelInstance != null)
-                    riveScene.BindViewModelInstance(riveViewModelInstance);
+                // No scene-level bind here: the view model is bound on the artboard above,
+                // which drives linear-animation scenes too and is inherited by state-machine
+                // instances when they're created (see the artboard block).
             }
         }
 
