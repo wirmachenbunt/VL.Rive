@@ -236,17 +236,23 @@ public sealed partial class RiveRenderer : RendererBase
 
         if (externalTimeControl && riveScene.IsLinearAnimation)
         {
-            // Drive the timeline position directly from 'progress' (0..1) instead of
-            // advancing by the frame clock. This lets the patch scrub, reverse, or run
+            // Drive the PARENT timeline position directly from 'progress' (0..1) instead of
+            // advancing it by the frame clock. This lets the patch scrub, reverse, or run
             // the animation at any speed. Not supported for state machines.
             var duration = riveScene.DurationSeconds;
             if (duration > 0f)
             {
                 var normalized = Math.Clamp(progress, 0f, 1f);
                 riveScene.SetTimeAndApply(normalized * duration);
-                // Flush the applied pose through the artboard (transforms, constraints, ...).
-                riveArtboard?.Advance(0f);
             }
+
+            // Advance the artboard by the REAL frame delta (not 0). riveScene is a standalone
+            // LinearAnimationInstance we scrub above and it is NOT one of the artboard's
+            // advancing components, so this does not disturb the scrubbed parent timeline.
+            // What it DOES advance is the rest of the tree - nested/instanced list artboards
+            // run on their own clock, so e.g. a freshly instanced item plays its intro once
+            // instead of freezing at time 0 (which is what Advance(0) used to do).
+            riveArtboard?.Advance((float)frameClock.TimeDifference);
         }
         else
         {
