@@ -4,6 +4,14 @@ Support for [Rive](https://rive.app/) files in VL including bi-directional [Data
 
 For use with vvvv, the visual live-programming environment for .NET: http://vvvv.org
 
+## Improvements in this fork
+Compared to the original [vvvv/VL.Rive](https://github.com/vvvv/VL.Rive), this fork adds:
+- **Newer Rive** – updated to the latest (2026-08) Rive runtime, so newer editor features and fixes are supported.
+- **Set text by name** – a *Text Runs* input on `RiveRenderer` lets you change named text directly, without setting up data binding first.
+- **Animation scrubbing** – drive an animation to an exact position/time yourself instead of only playing it.
+- **External time control** – advance the whole scene (including nested artboards) on your own clock, for frame-accurate and reproducible timing.
+- **More robust** – switch view model and scene in the same frame, an explicit update trigger, and safer artboard/scene lookup that fails gracefully instead of erroring.
+
 ## Getting started
 - Install as [described here](https://thegraybook.vvvv.org/reference/hde/managing-nugets.html) via commandline:
 
